@@ -1,5 +1,6 @@
 import json
 import os
+import unicodedata
 
 
 def is_empty(filename):
@@ -20,6 +21,9 @@ if is_empty(replacements_file):
 else:
     with open('替换字典.json', 'r', encoding='utf-8') as file:
         replacement_dict = json.load(file)
+        # 对替换字典中的值进行全角转换为半角
+        for key, value in replacement_dict.items():
+            replacement_dict[key] = unicodedata.normalize('NFKC', value)
 
     with open('原文.txt', 'r', encoding='utf-8') as file:
         content = file.read()

@@ -1,73 +1,96 @@
 @echo off
 chcp 65001
+:start
+echo 是否为继续翻译？
+set /p continue="是否为继续翻译？(是输入1，否输入2)"
+if /i "%continue%"=="1" goto continue_True
+if /i "%continue%"=="2" goto continue_False
+goto invalid
+
+:continue_True
+echo 正在运行 auto_continue 脚本...
+python auto_continue.py
+goto continue_False
+
+:continue_False
 echo 正在运行 自动翻译 脚本...
-echo 使用kaggle平台在线翻译选1，本地翻译选2 
+echo 使用kaggle平台在线翻译选1，本地翻译选2
 set /p platform="请输入使用的翻译平台(kaggle输入1，本地输入2)："
-if /i "%platform%"=="1" goto online
-if /i "%platform%"=="2" goto local
-goto invalid
+if /i "%platform%" NEQ "1" if /i "%platform%" NEQ "2" goto invalid
 
-:online
-set /p URL="请输入URL地址:"
-echo 翻译日语请使用Sakura模型，翻译英语请使用Qwen模型 
+echo 翻译日语请使用Sakura模型，翻译英语请使用Qwen模型
 set /p language="请输入需要被翻译的主要语言 (日语输入1，英语输入2)："
-if /i "%language%"=="1" goto jp_online
-if /i "%language%"=="2" goto en_online
-goto invalid
+if /i "%language%" NEQ "1" if /i "%language%" NEQ "2" goto invalid
 
-:local
-echo 翻译日语请使用Sakura模型，翻译英语请使用Qwen模型 
-set /p language="请输入需要被翻译的主要语言 (日语输入1，英语输入2)："
-if /i "%language%"=="1" goto jp_local
-if /i "%language%"=="2" goto en_local
-goto invalid
+if /i "%platform%"=="1" set "platform_type=online"
+if /i "%platform%"=="2" set "platform_type=local"
 
-:jp_local
-echo 正在运行translate_jp脚本...
-cd %~dp0
-python translate_jp.py http://127.0.0.1:5000
-if errorlevel 1 (
-    goto :end
+if /i "%language%"=="1" set "language_model=jp"
+if /i "%language%"=="2" set "language_model=en"
+
+if /i "%platform_type%"=="online" set /p URL="请输入URL地址:"
+
+if /i "%platform_type%"=="local" (
+    goto ask_model_type
 )
-echo 请务必检查翻译完成.json内的内容 
-goto :end
 
-:en_local
-echo 正在运行translate_en脚本...
-cd %~dp0
-python translate_en.py http://127.0.0.1:5000
-if errorlevel 1 (
-    goto :end
+call :translate_%language_model%_%platform_type%
+goto end
+
+:ask_model_type
+echo 是否使用1b8模型翻译
+set /p model="是或否(是输入1，否输入2)："
+if /i "%model%"=="1" (
+    set "model_type=1b8"
+) else if /i "%model%"=="2" (
+    set "model_type=standard"
+) else (
+    echo 无效的输入，请输入1或2.
+    goto ask_model_type
 )
-echo 请务必检查翻译完成.json内的内容 
-goto :end
+goto translate_local
 
-:jp_online
+:translate_jp_online
 echo 正在运行translate_kaggle_jp脚本...
-cd %~dp0
-python translate_kaggle_jp.py %URL%
-if errorlevel 1 (
-    goto :end
-)
-echo 请务必检查翻译完成.json内的内容 
-goto :end
+goto translate_script
 
-:en_online
+:translate_en_online
 echo 正在运行translate_kaggle_en脚本...
-cd %~dp0
-python translate_kaggle_en.py %URL%
-if errorlevel 1 (
-    goto :end
+goto translate_script
+
+:translate_local
+if "%language_model%"=="jp" if "%model_type%"=="1b8" (
+    echo 正在运行translate_jp_1b8脚本...
+    python translate_jp_1b8.py http://127.0.0.1:5000
+) else if "%language_model%"=="jp" (
+    echo 正在运行translate_jp脚本...
+    python translate_jp.py http://127.0.0.1:5000
 )
-echo 请务必检查翻译完成.json内的内容 
-goto :end
+
+if "%language_model%"=="en" if "%model_type%"=="1b8" (
+    echo 正在运行translate_en_1b8脚本...
+    python translate_en_1b8.py http://127.0.0.1:5000
+) else if "%language_model%"=="en" (
+    echo 正在运行translate_en脚本...
+    python translate_en.py http://127.0.0.1:5000
+)
+goto end
+
+:translate_script
+cd %~dp0
+if /i "%language_model%"=="jp" if /i "%platform_type%"=="local" python translate_jp.py http://127.0.0.1:5000
+if /i "%language_model%"=="en" if /i "%platform_type%"=="local" python translate_en.py http://127.0.0.1:5000
+if /i "%language_model%"=="jp" if /i "%platform_type%"=="online" python translate_kaggle_jp.py %URL%
+if /i "%language_model%"=="en" if /i "%platform_type%"=="online" python translate_kaggle_en.py %URL%
+if errorlevel 1 goto end
+echo 请务必检查翻译完成.json内的内容
+goto end
 
 :invalid
-echo 无效的输入
-echo 请重新输入有效的内容
-pause>nul
+echo 无效的输入，请重新输入有效的内容。
+pause
 goto start
 
 :end
+echo 执行完成。
 pause
-

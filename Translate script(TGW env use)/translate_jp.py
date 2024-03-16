@@ -4,6 +4,7 @@ import time
 import os
 import glob
 import sys
+import re
 
 temp_translate_dir = 'TempTranslate'
 emergency_backup_dir = '紧急弹出备份'
@@ -68,17 +69,56 @@ def calculate_newline_positions(text):
 
 # 插入换行符号
 def insert_newlines(translated_text, positions):
+    # 定义两种标点符号集
+    punctuation_marks_after = set("・．，。！？；：”’）】》,!?;:\"')]}>…♡~#$%^&*@")
+    punctuation_marks_before = set("“‘（【《([{<")
+
     length = len(translated_text)
     new_text = ""
     last_pos = 0
 
+    # 计算平均句子长度与换行符数量的比值
+    average_sentence_length = length / (len(positions) + 1)
+
     for pos in positions:
         current_pos = int(pos * length)
+        # 如果平均句子长度与换行符数量的比值小于4，不检查标点符号
+        if average_sentence_length >= 4:
+            punctuation_pos = None
+            # 检查后三个字符
+            for i in range(current_pos, min(current_pos + 3, length)):
+                if translated_text[i] in punctuation_marks_after:
+                    punctuation_pos = i + 1
+                    break
+                elif translated_text[i] in punctuation_marks_before:
+                    punctuation_pos = i
+                    break
+
+            # 检查前三个字符
+            if punctuation_pos is None:
+                for i in range(current_pos - 1, max(current_pos - 4, -1), -1):
+                    if translated_text[i] in punctuation_marks_after:
+                        punctuation_pos = i + 1
+                        break
+                    elif translated_text[i] in punctuation_marks_before:
+                        punctuation_pos = i
+                        break
+
+            # 如果找到了标点符号，更新插入位置
+            if punctuation_pos is not None:
+                current_pos = punctuation_pos
+
         new_text += translated_text[last_pos:current_pos] + "\n"
         last_pos = current_pos
 
     new_text += translated_text[last_pos:]
     return new_text
+
+
+# 有无日文
+def has_japanese(text):
+    japanese_pattern = re.compile(r'[\u3040-\u309F\u30A0-\u30FA\u30FD-\u30FF\uFF66-\uFF9F]+')
+    return bool(japanese_pattern.search(text))
 
 
 # 计算句子相似度
@@ -254,6 +294,9 @@ def process_translation(key_pt, value_pt, translation_pt, translated_data_pt, er
     elif similarity_pt > 90:
         print(f"对 {key_pt} 的翻译相似度过高，记录到错误列表。")
         errors_pt[key_pt] = value_pt
+    elif has_japanese(translation_pt):
+        print(f"对 {key_pt} 的翻译包涵日文，未完成，记录到错误列表。")
+        errors_pt[key_pt] = value_pt
     else:
         translated_data_pt[key_pt] = translation_pt
         # 更新对话历史
@@ -360,16 +403,32 @@ if translated_data:
 
 # 将出错的文本保存到另一个文件中
 if errors:
+    errors_all = {}
     errors_filename = '翻译错误.json'
+    errors_all.update(errors)
+    # 合并备份文件夹中的出错文本
+    if os.path.exists('备份'):
+        backup_dir = os.path.join(os.getcwd(), "备份")
+        errors_backup_files_pattern = os.path.join(backup_dir, "翻译错误备份*.json")
+        for filename in glob.glob(errors_backup_files_pattern):
+            with open(filename, 'r', encoding='utf-8') as file:
+                file_errors = json.load(file)
+                errors_all.update(file_errors)
     with open(errors_filename, 'w', encoding='utf-8') as file:
-        json.dump(errors, file, ensure_ascii=False, indent=4)
+        json.dump(errors_all, file, ensure_ascii=False, indent=4)
 
 # 合并所有临时翻译文件
 final_translations = {}
 for filename in glob.glob(os.path.join(temp_translate_dir, '*.json')):
     with open(filename, 'r', encoding='utf-8') as file:
         final_translations.update(json.load(file))
-
+# 合并备份文件夹中的翻译完成
+if os.path.exists('备份'):
+    backup_dir = os.path.join(os.getcwd(), "备份")
+    backup_files_pattern = os.path.join(backup_dir, "翻译完成备份*.json")
+    for filename in glob.glob(backup_files_pattern):
+        with open(filename, 'r', encoding='utf-8') as file:
+            final_translations.update(json.load(file))
 # 保存最终的合并翻译文件
 final_filename = '翻译完成.json'
 with open(final_filename, 'w', encoding='utf-8') as file:

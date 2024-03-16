@@ -59,9 +59,15 @@ def print_progress_bar(iteration, total, prefix='', suffix='', length=50, fill='
 
 
 def read_novel(filename_txt):
-    with open(filename_txt, 'r', encoding='utf-8') as file:
-        content = file.read()
-    return content
+    encodings = ['utf-8', 'shift_jis', 'gbk', 'big5']
+    for encoding in encodings:
+        try:
+            with open(filename_txt, 'r', encoding=encoding) as file:
+                content = file.read()
+            return content
+        except UnicodeDecodeError:
+            continue
+    raise ValueError(f'解码失败 {filename_txt} ')
 
 
 def split_paragraphs(text):
@@ -77,7 +83,7 @@ def split_paragraphs(text):
             combined_paragraphs.append("")  # 分隔
         else:
             # 合并逻辑
-            if len(current_paragraph + '\n' + paragraph) < 500:
+            if len(current_paragraph + '\n' + paragraph) < 600:
                 current_paragraph += ('\n' + paragraph if current_paragraph else paragraph)
             else:
                 if not current_paragraph:
